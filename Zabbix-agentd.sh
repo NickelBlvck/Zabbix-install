@@ -15,6 +15,17 @@ sudo sed -i 's/^Server=[^ ]*/Server=zabbix.kuznecoff.tech/' $ZABBIX_CONF
 # Заменяем строку с ServerActive
 sudo sed -i 's/^ServerActive=[^ ]*/ServerActive=zabbix.kuznecoff.tech/' $ZABBIX_CONF
 
+# Добавляем ListenPort и Hostname
+echo "Добавляем ListenPort и Hostname..."
+# Добавляем строку ListenPort=10050
+echo "ListenPort=10050" | sudo tee -a $ZABBIX_CONF > /dev/null
+
+# Получаем имя хоста из системы и приводим его к правильному виду
+HOSTNAME=$(hostname)
+HOSTNAME_CAPITALIZED=$(echo "$HOSTNAME" | sed 's/^[a-z]/\U&/')  # Преобразуем первую букву в заглавную
+
+# Добавляем Hostname в конфигурационный файл
+echo "Hostname=$HOSTNAME_CAPITALIZED" | sudo tee -a $ZABBIX_CONF > /dev/null
 
 # Добавляем параметры для Zabbix
 echo "Добавляем UserParameter для fail2ban и ssh.port..."
@@ -35,9 +46,18 @@ sudo wget -O /usr/local/bin/get_ssh_port.sh https://raw.githubusercontent.com/Ni
 # Делаем их исполнимыми
 sudo chmod +x /usr/local/bin/check_fail2ban.sh
 sudo chmod +x /usr/local/bin/get_ssh_port.sh
+
 # Перезапуск сервиса Zabbix Agent
+echo "Перезапускаем Zabbix Agent..."
 sudo systemctl restart zabbix-agent
+
 # Проверка статуса
 sudo systemctl status zabbix-agent
+
+# Выводим настроенные параметры в консоль
+echo "Конфигурация Zabbix Agent:"
+echo "ListenPort=10050"
+echo "Hostname=$HOSTNAME_CAPITALIZED"
+
 # Все готово
 echo "Zabbix Agent установлен и настроен."
