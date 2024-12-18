@@ -35,6 +35,9 @@ sudo wget -O /usr/local/bin/get_ssh_port.sh https://raw.githubusercontent.com/Ni
 # Делаем их исполнимыми
 sudo chmod +x /usr/local/bin/check_fail2ban.sh
 sudo chmod +x /usr/local/bin/get_ssh_port.sh
-
+# Перезапуск сервиса Zabbix Agent
+sudo systemctl restart zabbix-agent
+# Проверка статуса
+sudo systemctl status zabbix-agent
 # Все готово
 echo "Zabbix Agent установлен и настроен."
