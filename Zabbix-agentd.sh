@@ -10,8 +10,11 @@ ZABBIX_CONF="/etc/zabbix/zabbix_agentd.conf"
 
 # Настроим сервер и активный сервер
 echo "Настраиваем Server и ServerActive..."
-sudo sed -i 's/^#Server=127.0.0.1/Server=zabbix.kuznecoff.tech/' $ZABBIX_CONF
-sudo sed -i 's/^#ServerActive=127.0.0.1/ServerActive=zabbix.kuznecoff.tech/' $ZABBIX_CONF
+# Заменяем строку с Server
+sudo sed -i 's/^Server=[^ ]*/Server=zabbix.kuznecoff.tech/' $ZABBIX_CONF
+# Заменяем строку с ServerActive
+sudo sed -i 's/^ServerActive=[^ ]*/ServerActive=zabbix.kuznecoff.tech/' $ZABBIX_CONF
+
 
 # Добавляем параметры для Zabbix
 echo "Добавляем UserParameter для fail2ban и ssh.port..."
