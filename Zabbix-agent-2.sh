@@ -1,8 +1,17 @@
 #!/bin/bash
 
+# Обновляем систему
+echo "Обновляем систему..."
+sudo apt-get update
+
+# Добавляем репозиторий Zabbix
+echo "Добавляем репозиторий Zabbix..."
+wget https://repo.zabbix.com/zabbix/5.0/ubuntu/pool/main/z/zabbix-agent2/zabbix-agent2_5.0.21-1+ubuntu20.04_amd64.deb
+sudo dpkg -i zabbix-agent2_5.0.21-1+ubuntu20.04_amd64.deb
+sudo apt-get install -f
+
 # Устанавливаем Zabbix Agent 2
 echo "Устанавливаем Zabbix Agent 2..."
-sudo apt-get update
 sudo apt-get install -y zabbix-agent2
 
 # Путь к конфигурационному файлу Zabbix Agent 2
