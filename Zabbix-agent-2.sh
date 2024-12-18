@@ -20,6 +20,18 @@ echo "Добавляем UserParameter для fail2ban и ssh.port..."
 echo "UserParameter=service.status.fail2ban,/usr/local/bin/check_fail2ban.sh" | sudo tee -a $ZABBIX_CONF > /dev/null
 echo "UserParameter=ssh.port,/usr/local/bin/get_ssh_port.sh" | sudo tee -a $ZABBIX_CONF > /dev/null
 
+# Добавляем ListenPort и Hostname
+echo "Добавляем ListenPort и Hostname..."
+# Добавляем строку ListenPort=10050
+echo "ListenPort=10050" | sudo tee -a $ZABBIX_CONF > /dev/null
+
+# Получаем имя хоста из системы и приводим его к правильному виду
+HOSTNAME=$(hostname)
+HOSTNAME_CAPITALIZED=$(echo "$HOSTNAME" | sed 's/^[a-z]/\U&/')  # Преобразуем первую букву в заглавную
+
+# Добавляем Hostname в конфигурационный файл
+echo "Hostname=$HOSTNAME_CAPITALIZED" | sudo tee -a $ZABBIX_CONF > /dev/null
+
 # Перезагружаем Zabbix Agent 2
 echo "Перезагружаем Zabbix Agent 2..."
 sudo systemctl restart zabbix-agent2
@@ -41,6 +53,11 @@ sudo systemctl restart zabbix-agent2
 
 # Проверка статуса
 sudo systemctl status zabbix-agent2
+
+# Выводим настроенные параметры в консоль
+echo "Конфигурация Zabbix Agent 2:"
+echo "ListenPort=10050"
+echo "Hostname=$HOSTNAME_CAPITALIZED"
 
 # Все готово
 echo "Zabbix Agent 2 установлен и настроен."
