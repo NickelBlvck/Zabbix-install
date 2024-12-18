@@ -28,11 +28,11 @@ sudo systemctl restart zabbix-agent
 # Устанавливаем скрипты для проверки fail2ban и порта SSH
 echo "Загружаем скрипты из Git репозитория..."
 sudo apt-get install -y git
-sudo git clone https://github.com/NickelBlvck/check_fail2ban /usr/local/bin/check_fail2ban.sh
-sudo git clone https://github.com/NickelBlvck/get_ssh_port /usr/local/bin/get_ssh_port.sh
-
-# Делаем скрипты исполнимыми
-echo "Делаем скрипты исполнимыми..."
+# Скачиваем файл check_fail2ban.sh
+sudo wget -O /usr/local/bin/check_fail2ban.sh https://raw.githubusercontent.com/NickelBlvck/check_fail2ban/refs/heads/main/check_fail2ban.sh
+# Скачиваем файл get_ssh_port.sh
+sudo wget -O /usr/local/bin/get_ssh_port.sh https://raw.githubusercontent.com/NickelBlvck/get_ssh_port/refs/heads/main/get_ssh_port.sh
+# Делаем их исполнимыми
 sudo chmod +x /usr/local/bin/check_fail2ban.sh
 sudo chmod +x /usr/local/bin/get_ssh_port.sh
 
