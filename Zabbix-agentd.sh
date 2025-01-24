@@ -11,9 +11,9 @@ ZABBIX_CONF="/etc/zabbix/zabbix_agentd.conf"
 # Настроим сервер и активный сервер
 echo "Настраиваем Server и ServerActive..."
 # Заменяем строку с Server
-sudo sed -i 's/^Server=[^ ]*/Server=zabbix.kuznecoff.tech/' $ZABBIX_CONF
+sudo sed -i 's/^Server=[^ ]*/Server=zabbix.kuznecoff-k.ru' $ZABBIX_CONF
 # Заменяем строку с ServerActive
-sudo sed -i 's/^ServerActive=[^ ]*/ServerActive=zabbix.kuznecoff.tech/' $ZABBIX_CONF
+sudo sed -i 's/^ServerActive=[^ ]*/ServerActive=zabbix.kuznecoff-k.ru' $ZABBIX_CONF
 
 # Добавляем ListenPort и Hostname
 echo "Добавляем ListenPort и Hostname..."
