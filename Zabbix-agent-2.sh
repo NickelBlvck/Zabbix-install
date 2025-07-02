@@ -6,17 +6,16 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Переменные
 UBUNTU_VERSION=$(lsb_release -cs)  # jammy
-ZABBIX_VERSION="latest"            # можно указать "6.0", "6.4", "latest" и т.д.
+ZABBIX_RELEASE_DEB="zabbix-release_latest_7.4+ubuntu22.04_all.deb"
+ZABBIX_RELEASE_URL="https://repo.zabbix.com/zabbix/7.4/release/ubuntu/pool/main/z/zabbix-release/ $ZABBIX_RELEASE_DEB"
+
 ZABBIX_CONF="/etc/zabbix/zabbix_agent2.conf"
-ZABBIX_REPO_URL="https://repo.zabbix.com/zabbix/ ${ZABBIX_VERSION}/ubuntu"
-ZABBIX_REPO_KEY="https://repo.zabbix.com/RPM-GPG-KEY-ZABBIX-A14FE591 "
+ZABBIX_SERVICE="zabbix-agent2"
 
 # GitHub URL для скриптов
 GITHUB_REPO="https://raw.githubusercontent.com/NickelBlvck "
 CHECK_FAIL2BAN_URL="$GITHUB_REPO/check_fail2ban/main/check_fail2ban.sh"
 GET_SSH_PORT_URL="$GITHUB_REPO/get_ssh_port/main/get_ssh_port.sh"
-
-ZABBIX_SERVICE="zabbix-agent2"
 
 # Функция вывода ошибок
 log_error() {
@@ -36,22 +35,11 @@ sudo apt install -y wget curl git || log_error "Не удалось устано
 if systemctl list-units | grep -q "$ZABBIX_SERVICE"; then
     echo "ℹ️ Zabbix Agent 2 уже установлен."
 else
-    echo "🌐 Добавляем репозиторий Zabbix..."
-    # Добавляем GPG ключ
-    sudo wget -O /etc/apt/trusted.gpg.d/zabbix.gpg "$ZABBIX_REPO_KEY" \
-        || log_error "Не удалось загрузить GPG-ключ Zabbix."
-
-    # Добавляем sources.list
-    sudo wget -O /etc/apt/sources.list.d/zabbix.list "$ZABBIX_REPO_URL/zabbix.list" \
-        || log_error "Не удалось загрузить sources.list для Zabbix."
-
-    # Заменяем focal на jammy (если нужно)
-    sudo sed -i "s/focal/$UBUNTU_VERSION/g" /etc/apt/sources.list.d/zabbix.list
-
-    # Обновляем пакеты
+    echo "🌐 Загружаем и добавляем репозиторий Zabbix 7.4..."
+    sudo wget -O "/tmp/$ZABBIX_RELEASE_DEB" "$ZABBIX_RELEASE_URL" || log_error "Не удалось загрузить zabbix-release."
+    sudo dpkg -i "/tmp/$ZABBIX_RELEASE_DEB" || log_error "Не удалось установить zabbix-release."
     sudo apt update || log_error "Ошибка при обновлении пакетов после добавления репозитория."
 
-    # Установка Zabbix Agent 2
     echo "📥 Устанавливаем Zabbix Agent 2..."
     sudo apt install -y zabbix-agent2 || log_error "Не удалось установить Zabbix Agent 2."
 fi
