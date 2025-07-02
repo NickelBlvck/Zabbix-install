@@ -5,16 +5,17 @@ LOG_FILE="/var/log/zabbix_agent2_install.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Переменные
-ZABBIX_REPO_URL="https://repo.zabbix.com/zabbix/ "
-UBUNTU_VERSION=$(lsb_release -cs)
-ARCH=$(dpkg --print-architecture)
+UBUNTU_VERSION=$(lsb_release -cs)  # jammy
+ZABBIX_VERSION="latest"            # можно указать "6.0", "6.4", "latest" и т.д.
+ZABBIX_CONF="/etc/zabbix/zabbix_agent2.conf"
+ZABBIX_REPO_URL="https://repo.zabbix.com/zabbix/ ${ZABBIX_VERSION}/ubuntu"
+ZABBIX_REPO_KEY="https://repo.zabbix.com/RPM-GPG-KEY-ZABBIX-A14FE591 "
 
 # GitHub URL для скриптов
 GITHUB_REPO="https://raw.githubusercontent.com/NickelBlvck "
 CHECK_FAIL2BAN_URL="$GITHUB_REPO/check_fail2ban/main/check_fail2ban.sh"
 GET_SSH_PORT_URL="$GITHUB_REPO/get_ssh_port/main/get_ssh_port.sh"
 
-ZABBIX_CONF="/etc/zabbix/zabbix_agent2.conf"
 ZABBIX_SERVICE="zabbix-agent2"
 
 # Функция вывода ошибок
@@ -35,13 +36,19 @@ sudo apt install -y wget curl git || log_error "Не удалось устано
 if systemctl list-units | grep -q "$ZABBIX_SERVICE"; then
     echo "ℹ️ Zabbix Agent 2 уже установлен."
 else
-    # Добавляем репозиторий Zabbix (последняя LTS версия — можно изменить по необходимости)
     echo "🌐 Добавляем репозиторий Zabbix..."
-    ZABBIX_VERSION="6.0"  # Пример последней LTS версии, можно использовать "latest"
-    wget -qO /tmp/zabbix-release.deb "https://repo.zabbix.com/zabbix/ ${ZABBIX_VERSION}/ubuntu/pool/main/z/zabbix-release/zabbix-release_${ZABBIX_VERSION}-${UBUNTU_VERSION}_all.deb" \
-        || log_error "Не удалось загрузить пакет zabbix-release."
+    # Добавляем GPG ключ
+    sudo wget -O /etc/apt/trusted.gpg.d/zabbix.gpg "$ZABBIX_REPO_KEY" \
+        || log_error "Не удалось загрузить GPG-ключ Zabbix."
 
-    sudo dpkg -i /tmp/zabbix-release.deb || log_error "Не удалось установить zabbix-release."
+    # Добавляем sources.list
+    sudo wget -O /etc/apt/sources.list.d/zabbix.list "$ZABBIX_REPO_URL/zabbix.list" \
+        || log_error "Не удалось загрузить sources.list для Zabbix."
+
+    # Заменяем focal на jammy (если нужно)
+    sudo sed -i "s/focal/$UBUNTU_VERSION/g" /etc/apt/sources.list.d/zabbix.list
+
+    # Обновляем пакеты
     sudo apt update || log_error "Ошибка при обновлении пакетов после добавления репозитория."
 
     # Установка Zabbix Agent 2
