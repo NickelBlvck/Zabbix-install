@@ -9,8 +9,8 @@ ZABBIX_RELEASE_DEB="zabbix-release_latest_7.4+ubuntu22.04_all.deb"
 ZABBIX_RELEASE_URL="https://repo.zabbix.com/zabbix/7.4/release/ubuntu/pool/main/z/zabbix-release/ ${ZABBIX_RELEASE_DEB}"
 
 # Репозитории GitHub
-REPO_CHECK_FAIL2BAN="https://github.com/NickelBlvck/check_fail2ban.git "
-REPO_GET_SSH_PORT="https://github.com/NickelBlvck/get_ssh_port.git "
+REPO_CHECK_FAIL2BAN="https://github.com/NickelBlvck/check_fail2ban.git"
+REPO_GET_SSH_PORT="https://github.com/NickelBlvck/get_ssh_port.git"
 
 SCRIPT_DIR="/usr/local/bin"
 ZABBIX_CONF="/etc/zabbix/zabbix_agent2.conf"
