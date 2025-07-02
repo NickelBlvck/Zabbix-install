@@ -5,46 +5,44 @@ LOG_FILE="/var/log/zabbix_agent2_install.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Переменные
-GITHUB_REPO="https://raw.githubusercontent.com/NickelBlvck "
-CHECK_FAIL2BAN_URL="$GITHUB_REPO/check_fail2ban/main/check_fail2ban.sh"
-GET_SSH_PORT_URL="$GITHUB_REPO/get_ssh_port/main/get_ssh_port.sh"
-ZABBIX_CONF="/etc/zabbix/zabbix_agent2.conf"
-
 ZABBIX_RELEASE_DEB="zabbix-release_latest_7.4+ubuntu22.04_all.deb"
 ZABBIX_RELEASE_URL="https://repo.zabbix.com/zabbix/7.4/release/ubuntu/pool/main/z/zabbix-release/ $ZABBIX_RELEASE_DEB"
 
-# Обновляем систему
-echo "🔄 Обновляем систему..."
-sudo apt update && sudo apt upgrade -y || { echo "❌ Ошибка: не удалось обновить пакеты"; exit 1; }
+GITHUB_REPO="https://github.com/NickelBlvck "
+SCRIPT_DIR="/etc/zabbix/scripts"
+ZABBIX_CONF="/etc/zabbix/zabbix_agent2.conf"
+ZABBIX_SERVICE="zabbix-agent2"
 
-# Устанавливаем зависимости
+# Функция вывода ошибок
+log_error() {
+    echo "❌ Ошибка: $1" >&2
+    exit 1
+}
+
+# Обновление системы
+echo "🔄 Обновляем систему..."
+sudo apt update && sudo apt upgrade -y || log_error "Не удалось обновить систему."
+
+# Установка зависимостей
 echo "📦 Устанавливаем зависимости: wget, git, curl..."
-sudo apt install -y wget git curl || { echo "❌ Ошибка: не удалось установить зависимости"; exit 1; }
+sudo apt install -y wget git curl || log_error "Не удалось установить зависимости."
 
 # Проверяем, установлен ли zabbix-agent2
-if systemctl list-units | grep -q "zabbix-agent2"; then
+if systemctl list-units | grep -q "$ZABBIX_SERVICE"; then
     echo "ℹ️ Zabbix Agent 2 уже установлен."
 else
-    # Скачиваем и устанавливаем zabbix-release
-    echo "🌐 Загружаем репозиторий Zabbix 7.4..."
-    sudo wget -O "/tmp/$ZABBIX_RELEASE_DEB" "$ZABBIX_RELEASE_URL" --show-progress || {
-        echo "❌ Ошибка: не удалось загрузить zabbix-release.deb"
-        cat wget-log 2>/dev/null
-        exit 1
-    }
-    sudo dpkg -i "/tmp/$ZABBIX_RELEASE_DEB" || { echo "❌ Ошибка: не удалось установить zabbix-release"; exit 1; }
-
-    echo "🔁 Обновляем список пакетов..."
-    sudo apt update || { echo "❌ Ошибка: не удалось обновить пакеты после добавления репозитория"; exit 1; }
+    echo "🌐 Загружаем и устанавливаем репозиторий Zabbix 7.4..."
+    sudo wget -O "/tmp/$ZABBIX_RELEASE_DEB" "$ZABBIX_RELEASE_URL" --show-progress || log_error "Не удалось загрузить zabbix-release.deb"
+    sudo dpkg -i "/tmp/$ZABBIX_RELEASE_DEB" || log_error "Не удалось установить zabbix-release.deb"
+    sudo apt update || log_error "Не удалось обновить пакеты после добавления репозитория."
 
     echo "📥 Устанавливаем Zabbix Agent 2..."
-    sudo apt install -y zabbix-agent2 || { echo "❌ Ошибка: не удалось установить zabbix-agent2"; exit 1; }
+    sudo apt install -y zabbix-agent2 || log_error "Не удалось установить zabbix-agent2"
 fi
 
-# Проверяем наличие конфига
+# Проверяем наличие конфигурационного файла
 if [ ! -f "$ZABBIX_CONF" ]; then
-    echo "❌ Конфигурационный файл $ZABBIX_CONF не найден!"
-    exit 1
+    log_error "Конфигурационный файл не найден: $ZABBIX_CONF"
 fi
 
 # Настройка Server и ServerActive
@@ -61,44 +59,57 @@ HOSTNAME_CAPITALIZED=$(hostname | sed 's/^[a-z]/\U&/')
 # Устанавливаем Hostname
 echo "Hostname=$HOSTNAME_CAPITALIZED" | sudo tee -a "$ZABBIX_CONF" > /dev/null
 
-# Добавляем UserParameter'ы
-echo "🛠️ Добавляем пользовательские параметры..."
-echo "UserParameter=service.status.fail2ban,/usr/local/bin/check_fail2ban.sh" | sudo tee -a "$ZABBIX_CONF" > /dev/null
-echo "UserParameter=ssh.port,/usr/local/bin/get_ssh_port.sh" | sudo tee -a "$ZABBIX_CONF" > /dev/null
+# Создаём директорию для скриптов
+sudo mkdir -p "$SCRIPT_DIR"
 
-# Перезапускаем службу
+# Удаляем старые версии скриптов, если они есть
+sudo rm -f "$SCRIPT_DIR"/*.sh
+
+# Клонируем репозитории
+cd /tmp || exit 1
+
+echo "📂 Клонируем репозитории..."
+if [ -d "check_fail2ban" ]; then sudo rm -rf check_fail2ban; fi
+git clone "$GITHUB_REPO/check_fail2ban.git" || log_error "Ошибка при клонировании check_fail2ban"
+sudo cp check_fail2ban/check_fail2ban.sh "$SCRIPT_DIR/"
+
+if [ -d "get_ssh_port" ]; then sudo rm -rf get_ssh_port; fi
+git clone "$GITHUB_REPO/get_ssh_port.git" || log_error "Ошибка при клонировании get_ssh_port"
+sudo cp get_ssh_port/get_ssh_port.sh "$SCRIPT_DIR/"
+
+# Делаем скрипты исполняемыми
+sudo chmod +x "$SCRIPT_DIR"/*.sh
+
+# Удаляем старые UserParameter'ы
+sudo sed -i '/UserParameter=service.status.fail2ban/d' "$ZABBIX_CONF"
+sudo sed -i '/UserParameter=ssh.port/d' "$ZABBIX_CONF"
+
+# Добавляем новые UserParameter'ы
+echo "UserParameter=service.status.fail2ban,$SCRIPT_DIR/check_fail2ban.sh" | sudo tee -a "$ZABBIX_CONF" > /dev/null
+echo "UserParameter=ssh.port,$SCRIPT_DIR/get_ssh_port.sh" | sudo tee -a "$ZABBIX_CONF" > /dev/null
+
+# Перезапуск службы
 echo "🔁 Перезапускаем Zabbix Agent 2..."
-sudo systemctl restart zabbix-agent2 || { echo "❌ Ошибка: не удалось перезапустить zabbix-agent2"; exit 1; }
+sudo systemctl enable --now "$ZABBIX_SERVICE" || log_error "Не удалось запустить службу."
+sudo systemctl restart "$ZABBIX_SERVICE" || log_error "Не удалось перезапустить службу."
 
-# Проверяем статус службы
-if ! sudo systemctl is-active --quiet zabbix-agent2; then
-    echo "❌ Ошибка: zabbix-agent2 не запущен"
-    exit 1
+# Проверка статуса
+if ! sudo systemctl is-active --quiet "$ZABBIX_SERVICE"; then
+    log_error "Служба $ZABBIX_SERVICE не запущена!"
 fi
 
-# Скачиваем скрипты из GitHub
-echo "📂 Загружаем скрипты из GitHub..."
-sudo mkdir -p /usr/local/bin/
-
-sudo wget -O /usr/local/bin/check_fail2ban.sh "$CHECK_FAIL2BAN_URL" || { echo "❌ Ошибка: не удалось загрузить check_fail2ban.sh"; exit 1; }
-sudo wget -O /usr/local/bin/get_ssh_port.sh "$GET_SSH_PORT_URL" || { echo "❌ Ошибка: не удалось загрузить get_ssh_port.sh"; exit 1; }
-
-sudo chmod +x /usr/local/bin/check_fail2ban.sh /usr/local/bin/get_ssh_port.sh
-
-# Перезапуск после установки скриптов
-sudo systemctl restart zabbix-agent2
-
-# Ввод имени хоста
+# Ввод имени хоста от пользователя
 read -rp "Введите наименование узла (Hostname) для Zabbix (Enter — использовать '$HOSTNAME_CAPITALIZED'): " USER_HOSTNAME
 USER_HOSTNAME=${USER_HOSTNAME:-$HOSTNAME_CAPITALIZED}
 
-# Обновляем Hostname в конфиге
+# Обновление Hostname в конфиге
 sudo sed -i "s/^Hostname=.*/Hostname=$USER_HOSTNAME/" "$ZABBIX_CONF"
 
-# Перезапуск с новым Hostname
-sudo systemctl restart zabbix-agent2 || { echo "❌ Ошибка: не удалось перезапустить zabbix-agent2"; exit 1; }
+# Перезапуск после изменения Hostname
+sudo systemctl restart "$ZABBIX_SERVICE" || log_error "Не удалось перезапустить Zabbix Agent 2."
 
 # Вывод информации
 echo -e "\n✅ Zabbix Agent 2 успешно установлен и настроен."
+echo "📂 Скрипты размещены в: $SCRIPT_DIR"
 echo "🔌 Port: 10050"
 echo "🖥️ Hostname: $USER_HOSTNAME"
