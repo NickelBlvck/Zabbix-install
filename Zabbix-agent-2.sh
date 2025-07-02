@@ -5,101 +5,104 @@ LOG_FILE="/var/log/zabbix_agent2_install.log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Переменные
-GITHUB_REPO="https://raw.githubusercontent.com/NickelBlvck"
-CHECK_FAIL2BAN_URL="$GITHUB_REPO/check_fail2ban/refs/heads/main/check_fail2ban.sh"
-GET_SSH_PORT_URL="$GITHUB_REPO/get_ssh_port/refs/heads/main/get_ssh_port.sh"
+ZABBIX_REPO_URL="https://repo.zabbix.com/zabbix/ "
+UBUNTU_VERSION=$(lsb_release -cs)
+ARCH=$(dpkg --print-architecture)
+
+# GitHub URL для скриптов
+GITHUB_REPO="https://raw.githubusercontent.com/NickelBlvck "
+CHECK_FAIL2BAN_URL="$GITHUB_REPO/check_fail2ban/main/check_fail2ban.sh"
+GET_SSH_PORT_URL="$GITHUB_REPO/get_ssh_port/main/get_ssh_port.sh"
+
 ZABBIX_CONF="/etc/zabbix/zabbix_agent2.conf"
+ZABBIX_SERVICE="zabbix-agent2"
 
-# Обновляем систему
-echo "Обновляем систему..."
-sudo apt-get update || { echo "Ошибка при обновлении пакетов"; exit 1; }
-
-# Добавляем репозиторий Zabbix
-echo "Добавляем репозиторий Zabbix..."
-wget https://repo.zabbix.com/zabbix/5.0/ubuntu/pool/main/z/zabbix-agent2/zabbix-agent2_5.0.21-1+ubuntu20.04_amd64.deb || { echo "Ошибка при загрузке пакета Zabbix Agent 2"; exit 1; }
-sudo dpkg -i zabbix-agent2_5.0.21-1+ubuntu20.04_amd64.deb || { echo "Ошибка при установке пакета Zabbix Agent 2"; exit 1; }
-sudo apt-get install -f || { echo "Ошибка при установке зависимостей"; exit 1; }
-
-# Устанавливаем Zabbix Agent 2
-echo "Устанавливаем Zabbix Agent 2..."
-sudo apt-get install -y zabbix-agent2 || { echo "Ошибка при установке Zabbix Agent 2"; exit 1; }
-
-# Проверка наличия конфигурационного файла
-if [ ! -f "$ZABBIX_CONF" ]; then
-    echo "Конфигурационный файл Zabbix Agent 2 не найден: $ZABBIX_CONF"
+# Функция вывода ошибок
+log_error() {
+    echo "❌ Ошибка: $1" >&2
     exit 1
+}
+
+# Обновление системы
+echo "🔄 Обновляем систему..."
+sudo apt update && sudo apt upgrade -y || log_error "Не удалось обновить систему."
+
+# Установка зависимостей
+echo "📦 Устанавливаем необходимые зависимости..."
+sudo apt install -y wget curl git || log_error "Не удалось установить зависимости."
+
+# Проверка наличия Zabbix Agent 2
+if systemctl list-units | grep -q "$ZABBIX_SERVICE"; then
+    echo "ℹ️ Zabbix Agent 2 уже установлен."
+else
+    # Добавляем репозиторий Zabbix (последняя LTS версия — можно изменить по необходимости)
+    echo "🌐 Добавляем репозиторий Zabbix..."
+    ZABBIX_VERSION="6.0"  # Пример последней LTS версии, можно использовать "latest"
+    wget -qO /tmp/zabbix-release.deb "https://repo.zabbix.com/zabbix/ ${ZABBIX_VERSION}/ubuntu/pool/main/z/zabbix-release/zabbix-release_${ZABBIX_VERSION}-${UBUNTU_VERSION}_all.deb" \
+        || log_error "Не удалось загрузить пакет zabbix-release."
+
+    sudo dpkg -i /tmp/zabbix-release.deb || log_error "Не удалось установить zabbix-release."
+    sudo apt update || log_error "Ошибка при обновлении пакетов после добавления репозитория."
+
+    # Установка Zabbix Agent 2
+    echo "📥 Устанавливаем Zabbix Agent 2..."
+    sudo apt install -y zabbix-agent2 || log_error "Не удалось установить Zabbix Agent 2."
 fi
 
-# Настроим сервер и активный сервер
-echo "Настраиваем Server и ServerActive..."
-sudo sed -i 's/^Server=[^ ]*/Server=zabbix.kuznecoff-k.ru/' $ZABBIX_CONF
-sudo sed -i 's/^ServerActive=[^ ]*/ServerActive=zabbix.kuznecoff-k.ru/' $ZABBIX_CONF
+# Проверка конфигурационного файла
+if [ ! -f "$ZABBIX_CONF" ]; then
+    log_error "Конфигурационный файл не найден: $ZABBIX_CONF"
+fi
 
-# Добавляем ListenPort
-echo "Добавляем ListenPort..."
-echo "ListenPort=10050" | sudo tee -a $ZABBIX_CONF > /dev/null
+# Получение имени хоста
+HOSTNAME_CAPITALIZED=$(hostname | sed 's/^[a-z]/\U&/')
 
-# Получаем имя хоста из системы и приводим его к правильному виду
-HOSTNAME=$(hostname)
-HOSTNAME_CAPITALIZED=$(echo "$HOSTNAME" | sed 's/^[a-z]/\U&/')  # Преобразуем первую букву в заглавную
+# Настройка конфигурации
+echo "⚙️ Настраиваем конфигурацию Zabbix Agent 2..."
+sudo tee "$ZABBIX_CONF" > /dev/null <<EOF
+PidFile=/run/zabbix/zabbix_agent2.pid
+LogFile=/var/log/zabbix/zabbix_agent2.log
+LogFileSize=0
+Server=zabbix.kuznecoff-k.ru
+ServerActive=zabbix.kuznecoff-k.ru
+Hostname=$HOSTNAME_CAPITALIZED
+ListenPort=10050
+Include=/etc/zabbix/zabbix_agent2.d/*.conf
+UserParameter=service.status.fail2ban,/usr/local/bin/check_fail2ban.sh
+UserParameter=ssh.port,/usr/local/bin/get_ssh_port.sh
+EOF
 
-# Добавляем Hostname в конфигурационный файл
-echo "Hostname=$HOSTNAME_CAPITALIZED" | sudo tee -a $ZABBIX_CONF > /dev/null
+# Создание директории для скриптов, если её нет
+sudo mkdir -p /usr/local/bin/
 
-# Добавляем параметры для Zabbix
-echo "Добавляем UserParameter для fail2ban и ssh.port..."
-echo "UserParameter=service.status.fail2ban,/usr/local/bin/check_fail2ban.sh" | sudo tee -a $ZABBIX_CONF > /dev/null
-echo "UserParameter=ssh.port,/usr/local/bin/get_ssh_port.sh" | sudo tee -a $ZABBIX_CONF > /dev/null
+# Скачивание скриптов
+echo "📂 Загружаем пользовательские скрипты..."
+sudo wget -O /usr/local/bin/check_fail2ban.sh "$CHECK_FAIL2BAN_URL" || log_error "Ошибка загрузки check_fail2ban.sh"
+sudo wget -O /usr/local/bin/get_ssh_port.sh "$GET_SSH_PORT_URL" || log_error "Ошибка загрузки get_ssh_port.sh"
 
-# Перезагружаем Zabbix Agent 2
-echo "Перезагружаем Zabbix Agent 2..."
-sudo systemctl restart zabbix-agent2 || { echo "Ошибка при перезапуске Zabbix Agent 2"; exit 1; }
+sudo chmod +x /usr/local/bin/check_fail2ban.sh /usr/local/bin/get_ssh_port.sh
 
-# Устанавливаем скрипты для проверки fail2ban и порта SSH
-echo "Загружаем скрипты из Git репозитория..."
-sudo apt-get install -y git || { echo "Ошибка при установке git"; exit 1; }
-
-# Скачиваем файл check_fail2ban.sh
-sudo wget -O /usr/local/bin/check_fail2ban.sh $CHECK_FAIL2BAN_URL || { echo "Ошибка при загрузке check_fail2ban.sh"; exit 1; }
-
-# Скачиваем файл get_ssh_port.sh
-sudo wget -O /usr/local/bin/get_ssh_port.sh $GET_SSH_PORT_URL || { echo "Ошибка при загрузке get_ssh_port.sh"; exit 1; }
-
-# Делаем их исполнимыми
-sudo chmod +x /usr/local/bin/check_fail2ban.sh
-sudo chmod +x /usr/local/bin/get_ssh_port.sh
-
-# Перезапуск сервиса Zabbix Agent 2
-echo "Перезапускаем Zabbix Agent 2..."
-sudo systemctl restart zabbix-agent2 || { echo "Ошибка при перезапуске Zabbix Agent 2"; exit 1; }
+# Перезапуск службы
+echo "🔁 Перезапускаем Zabbix Agent 2..."
+sudo systemctl enable --now "$ZABBIX_SERVICE" || log_error "Не удалось запустить службу."
+sudo systemctl restart "$ZABBIX_SERVICE" || log_error "Не удалось перезапустить службу."
 
 # Проверка статуса
-if ! sudo systemctl is-active --quiet zabbix-agent2; then
-    echo "Zabbix Agent 2 не запущен"
-    exit 1
+if ! sudo systemctl is-active --quiet "$ZABBIX_SERVICE"; then
+    log_error "Служба $ZABBIX_SERVICE не запущена!"
 fi
 
-# Запрос наименования узла у пользователя
-echo "Введите наименование узла (Hostname), которое будет использоваться в Zabbix:"
-read -r USER_HOSTNAME
+# Ввод имени хоста от пользователя
+read -rp "Введите наименование узла (Hostname), которое будет использоваться в Zabbix (Enter для использования '$HOSTNAME_CAPITALIZED'): " USER_HOSTNAME
+USER_HOSTNAME=${USER_HOSTNAME:-$HOSTNAME_CAPITALIZED}
 
-# Проверка, что пользователь ввел значение
-if [ -z "$USER_HOSTNAME" ]; then
-    echo "Наименование узла не может быть пустым. Используется значение по умолчанию: $HOSTNAME_CAPITALIZED"
-    USER_HOSTNAME="$HOSTNAME_CAPITALIZED"
-fi
+# Обновление Hostname в конфиге
+sudo sed -i "s/^Hostname=.*/Hostname=$USER_HOSTNAME/" "$ZABBIX_CONF"
 
-# Обновляем Hostname в конфигурационном файле
-sudo sed -i "s/^Hostname=.*/Hostname=$USER_HOSTNAME/" $ZABBIX_CONF
+# Перезапуск после изменения Hostname
+sudo systemctl restart "$ZABBIX_SERVICE" || log_error "Не удалось перезапустить Zabbix Agent 2."
 
-# Перезапускаем Zabbix Agent 2 с новым Hostname
-echo "Перезапускаем Zabbix Agent 2 с новым Hostname..."
-sudo systemctl restart zabbix-agent2 || { echo "Ошибка при перезапуске Zabbix Agent 2"; exit 1; }
-
-# Выводим настроенные параметры в консоль
-echo "Конфигурация Zabbix Agent 2:"
-echo "ListenPort=10050"
-echo "Hostname=$USER_HOSTNAME"
-
-# Все готово
-echo "Zabbix Agent 2 установлен и настроен."
+# Вывод информации
+echo -e "\n✅ Zabbix Agent 2 успешно установлен и настроен."
+echo "🔌 ListenPort: 10050"
+echo "🖥️ Hostname: $USER_HOSTNAME"
