@@ -8,8 +8,11 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 ZABBIX_RELEASE_DEB="zabbix-release_latest_7.4+ubuntu22.04_all.deb"
 ZABBIX_RELEASE_URL="https://repo.zabbix.com/zabbix/7.4/release/ubuntu/pool/main/z/zabbix-release/ $ZABBIX_RELEASE_DEB"
 
-GITHUB_REPO="https://github.com/NickelBlvck "
-SCRIPT_DIR="/etc/zabbix/scripts"
+# Правильные ссылки на GitHub (сырые файлы)
+CHECK_FAIL2BAN_URL="https://raw.githubusercontent.com/NickelBlvck/check_fail2ban/main/check_fail2ban.sh "
+GET_SSH_PORT_URL="https://raw.githubusercontent.com/NickelBlvck/get_ssh_port/main/get_ssh_port.sh "
+
+SCRIPT_DIR="/usr/local/bin"
 ZABBIX_CONF="/etc/zabbix/zabbix_agent2.conf"
 ZABBIX_SERVICE="zabbix-agent2"
 
@@ -25,7 +28,7 @@ sudo apt update && sudo apt upgrade -y || log_error "Не удалось обн�
 
 # Установка зависимостей
 echo "📦 Устанавливаем зависимости: wget, git, curl..."
-sudo apt install -y wget git curl || log_error "Не удалось установить зависимости."
+sudo apt install -y wget curl || log_error "Не удалось установить зависимости."
 
 # Проверяем, установлен ли zabbix-agent2
 if systemctl list-units | grep -q "$ZABBIX_SERVICE"; then
@@ -59,28 +62,16 @@ HOSTNAME_CAPITALIZED=$(hostname | sed 's/^[a-z]/\U&/')
 # Устанавливаем Hostname
 echo "Hostname=$HOSTNAME_CAPITALIZED" | sudo tee -a "$ZABBIX_CONF" > /dev/null
 
-# Создаём директорию для скриптов
-sudo mkdir -p "$SCRIPT_DIR"
+# Скачиваем скрипты из GitHub
+echo "📂 Загружаем пользовательские скрипты..."
 
-# Удаляем старые версии скриптов, если они есть
-sudo rm -f "$SCRIPT_DIR"/*.sh
+sudo wget -O "$SCRIPT_DIR/check_fail2ban.sh" "$CHECK_FAIL2BAN_URL" || log_error "Ошибка при загрузке check_fail2ban.sh"
+sudo wget -O "$SCRIPT_DIR/get_ssh_port.sh" "$GET_SSH_PORT_URL" || log_error "Ошибка при загрузке get_ssh_port.sh"
 
-# Клонируем репозитории
-cd /tmp || exit 1
+# Делаем их исполняемыми
+sudo chmod +x "$SCRIPT_DIR"/check_fail2ban.sh "$SCRIPT_DIR"/get_ssh_port.sh
 
-echo "📂 Клонируем репозитории..."
-if [ -d "check_fail2ban" ]; then sudo rm -rf check_fail2ban; fi
-git clone "$GITHUB_REPO/check_fail2ban.git" || log_error "Ошибка при клонировании check_fail2ban"
-sudo cp check_fail2ban/check_fail2ban.sh "$SCRIPT_DIR/"
-
-if [ -d "get_ssh_port" ]; then sudo rm -rf get_ssh_port; fi
-git clone "$GITHUB_REPO/get_ssh_port.git" || log_error "Ошибка при клонировании get_ssh_port"
-sudo cp get_ssh_port/get_ssh_port.sh "$SCRIPT_DIR/"
-
-# Делаем скрипты исполняемыми
-sudo chmod +x "$SCRIPT_DIR"/*.sh
-
-# Удаляем старые UserParameter'ы
+# Удаляем старые UserParameter'ы, если они есть
 sudo sed -i '/UserParameter=service.status.fail2ban/d' "$ZABBIX_CONF"
 sudo sed -i '/UserParameter=ssh.port/d' "$ZABBIX_CONF"
 
@@ -110,6 +101,5 @@ sudo systemctl restart "$ZABBIX_SERVICE" || log_error "Не удалось пе�
 
 # Вывод информации
 echo -e "\n✅ Zabbix Agent 2 успешно установлен и настроен."
-echo "📂 Скрипты размещены в: $SCRIPT_DIR"
 echo "🔌 Port: 10050"
 echo "🖥️ Hostname: $USER_HOSTNAME"
